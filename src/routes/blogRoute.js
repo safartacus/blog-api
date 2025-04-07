@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const blogController = require('../controllers/blogController');
-const upload = require('../middleware/Upload');
+const upload = require('../middleware/uploadmiddleware');
 const {protect} = require('../middleware/auth');
 
 router.get('/search', blogController.searchBlogs); 
