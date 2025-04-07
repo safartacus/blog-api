@@ -10,7 +10,13 @@ dotenv.config();
 const app = express();
 
 // Middleware'leri ekle
-app.use(cors());
+app.use(cors({
+    origin: [
+        process.env.PRODUCTION_URL,
+        process.env.TEST_URL
+      ],
+      credentials: true
+}));
 app.use(express.json({ limit: '50mb' }));  // JSON boyut limitini artır
 app.use(express.urlencoded({ limit: '50mb', extended: true }));  // URL-encoded boyut limitini artır
 
