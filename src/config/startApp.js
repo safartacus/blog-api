@@ -4,6 +4,7 @@ const blogRoutes = require('../routes/blogRoute');
 const categoryRoutes = require('../routes/categoryRoutes');
 const authRoutes = require('../routes/authRoute');
 const userRoutes = require('../routes/userRoute');
+const commentRoutes = require('../routes/commentRoute');
 const startApp = async (app) => {
     try {
         // Önce MongoDB'ye bağlan
@@ -18,6 +19,7 @@ const startApp = async (app) => {
         app.use('/api/categories', categoryRoutes);
         app.use('/api/auth', authRoutes);
         app.use('/api/users', userRoutes);
+        app.use('/api/comments', commentRoutes);
         // Sunucuyu başlat
         const PORT = process.env.PORT || 3000;
         const server = app.listen(PORT, () => {
