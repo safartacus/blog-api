@@ -30,7 +30,15 @@ const blogSchema = new mongoose.Schema({
   readTime: {
     type: Number,
     required: true
-  }
+  },
+  likes: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  dislikes: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }]
 }, {
   timestamps: true // createdAt ve updatedAt alanlarını otomatik ekler
 });

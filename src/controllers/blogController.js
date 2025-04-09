@@ -1,5 +1,6 @@
-const Blog = require('../models/Blog');
+const Blog = require('../models/blog');
 const cloudinary = require('cloudinary').v2; 
+const amqp = require('amqplib');
 
 exports.createBlog = async (req, res) => {
   try {
@@ -144,5 +145,202 @@ exports.deleteBlog = async (req, res) => {
     res.json({ message: 'Blog başarıyla silindi' });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+// exports.toggleLike = async (req, res) => {
+//   try {
+//     const blogId = req.params.blogId;
+//     const userId = req.user.id; // Giriş yapmış kullanıcının ID'si
+
+//     // Blog'u bul ve likes/dislikes bilgilerini getir
+//     const blog = await Blog.findById(blogId);
+    
+//     if (!blog) {
+//       return res.status(404).json({ message: 'Blog bulunamadı' });
+//     }
+
+//     // Kullanıcının like durumunu kontrol et
+//     const likeIndex = blog.likes.indexOf(userId);
+//     const dislikeIndex = blog.dislikes.indexOf(userId);
+
+//     // Like durumuna göre işlem yap
+//     if (likeIndex === -1) {
+//       // Like ekle
+//       blog.likes.push(userId);
+//       // Varsa dislike'ı kaldır
+//       if (dislikeIndex !== -1) {
+//         blog.dislikes.splice(dislikeIndex, 1);
+//       }
+//     } else {
+//       // Like'ı kaldır
+//       blog.likes.splice(likeIndex, 1);
+//     }
+
+//     // Blog'u kaydet ve populate et
+//     await blog.save();
+    
+//     // Güncel blog bilgisini getir
+//     const updatedBlog = await Blog.findById(blogId)
+//       .populate('likes', 'firstName lastName email profileImage')
+//       .populate('dislikes', 'firstName lastName email profileImage')
+//       .populate('author', 'firstName lastName email profileImage');
+
+//     res.json(updatedBlog);
+//   } catch (error) {
+//     console.error('Like toggle hatası:', error);
+//     res.status(500).json({ message: 'Bir hata oluştu' });
+//   }
+// };
+
+// exports.toggleDislike = async (req, res) => {
+//   try {
+//     const blogId = req.params.blogId;
+//     const userId = req.user.id;
+
+//     // Blog'u bul ve likes/dislikes bilgilerini getir
+//     const blog = await Blog.findById(blogId);
+    
+//     if (!blog) {
+//       return res.status(404).json({ message: 'Blog bulunamadı' });
+//     }
+
+//     // Kullanıcının dislike durumunu kontrol et
+//     const dislikeIndex = blog.dislikes.indexOf(userId);
+//     const likeIndex = blog.likes.indexOf(userId);
+
+//     // Dislike durumuna göre işlem yap
+//     if (dislikeIndex === -1) {
+//       // Dislike ekle
+//       blog.dislikes.push(userId);
+//       // Varsa like'ı kaldır
+//       if (likeIndex !== -1) {
+//         blog.likes.splice(likeIndex, 1);
+//       }
+//     } else {
+//       // Dislike'ı kaldır
+//       blog.dislikes.splice(dislikeIndex, 1);
+//     }
+
+//     // Blog'u kaydet ve populate et
+//     await blog.save();
+    
+//     // Güncel blog bilgisini getir
+//     const updatedBlog = await Blog.findById(blogId)
+//       .populate('likes', 'firstName lastName email profileImage')
+//       .populate('dislikes', 'firstName lastName email profileImage')
+//       .populate('author', 'firstName lastName email profileImage');
+
+//     res.json(updatedBlog);
+//   } catch (error) {
+//     console.error('Dislike toggle hatası:', error);
+//     res.status(500).json({ message: 'Bir hata oluştu' });
+//   }
+// };
+
+exports.toggleLike = async (req, res) => {
+  try {
+    const blogId = req.params.blogId;
+    const userId = req.user.id;
+
+    let blog = await Blog.findById(blogId)
+      .populate('author', 'email firstName lastName');
+    
+    if (!blog) {
+      return res.status(404).json({ message: 'Blog bulunamadı' });
+    }
+    const User = require('../models/User');
+    const user = await User.findById(userId)
+      .select('firstName lastName email profileImage');
+
+    const hasLiked = blog.likes.includes(userId);
+
+    if (hasLiked) {
+      // Like'ı kaldır
+      blog.likes.pull(userId);
+    } else {
+      // Like ekle ve dislike'ı kaldır
+      blog.likes.push(userId);
+      blog.dislikes.pull(userId);
+
+      // RabbitMQ'ya bildirim gönder
+      try {
+        const connection = await amqp.connect(process.env.RABBITMQ_URL);
+        const channel = await connection.createChannel();
+        const notificationData = {
+          recipientId: blog.author._id,
+          recipientEmail: blog.author.email,
+          recipientFirstName: blog.author.firstName,
+          recipientLastName: blog.author.lastName,
+          recipientProfileImage: user.profileImage.url,
+          senderId: userId,
+          senderFirstName: user.firstName,
+          senderLastName: user.lastName,
+          type: 'BLOG_LIKE',
+          blogId: blogId,
+          url: `${process.env.FRONTEND_URL}/blogs/${blogId}`
+        };
+        
+        await channel.assertQueue('like_notification', { durable: true });
+        channel.sendToQueue(
+          'like_notification',
+          Buffer.from(JSON.stringify(notificationData))
+        );
+
+        await channel.close();
+        await connection.close();
+      } catch (mqError) {
+        console.error('RabbitMQ hatası:', mqError);
+      }
+    }
+
+    await blog.save();
+    
+    // Güncel blog bilgisini getir
+    blog = await Blog.findById(blogId)
+      .populate('likes', 'firstName lastName email profileImage')
+      .populate('dislikes', 'firstName lastName email profileImage')
+      .populate('author', 'firstName lastName email profileImage');
+
+    res.json(blog);
+  } catch (error) {
+    console.error('Like toggle hatası:', error);
+    res.status(500).json({ message: 'Bir hata oluştu' });
+  }
+};
+
+exports.toggleDislike = async (req, res) => {
+  try {
+    const blogId = req.params.blogId;
+    const userId = req.user.id;
+
+    let blog = await Blog.findById(blogId);
+    
+    if (!blog) {
+      return res.status(404).json({ message: 'Blog bulunamadı' });
+    }
+
+    const hasDisliked = blog.dislikes.includes(userId);
+
+    if (hasDisliked) {
+      // Dislike'ı kaldır
+      blog.dislikes.pull(userId);
+    } else {
+      // Dislike ekle ve like'ı kaldır
+      blog.dislikes.push(userId);
+      blog.likes.pull(userId);
+    }
+
+    await blog.save();
+    
+    // Güncel blog bilgisini getir
+    blog = await Blog.findById(blogId)
+      .populate('likes', 'firstName lastName email profileImage')
+      .populate('dislikes', 'firstName lastName email profileImage')
+      .populate('author', 'firstName lastName email profileImage');
+
+    res.json(blog);
+  } catch (error) {
+    console.error('Dislike toggle hatası:', error);
+    res.status(500).json({ message: 'Bir hata oluştu' });
   }
 };

@@ -16,4 +16,7 @@ router.put('/:id', protect, upload.single('image'), blogController.updateBlog);
 router.delete('/:id', protect, blogController.deleteBlog);
 
 
+router.post('/:blogId/like', protect, blogController.toggleLike);
+router.post('/:blogId/dislike', protect, blogController.toggleDislike);
+
 module.exports = router;
