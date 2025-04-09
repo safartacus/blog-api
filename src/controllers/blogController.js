@@ -1,4 +1,4 @@
-const Blog = require('../models/blog');
+const Blog = require('../models/Blog');
 const cloudinary = require('cloudinary').v2; 
 const amqp = require('amqplib');
 
